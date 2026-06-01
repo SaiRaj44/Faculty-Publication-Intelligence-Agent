@@ -136,14 +136,7 @@ export default async function Dashboard() {
                     </td>
                     <td className="py-4 text-right flex gap-3 justify-end items-center">
                       {pub.status === 'PENDING' && canApprove ? (
-                        <>
-                          <form action={approvePublication.bind(null, pub.id)}>
-                            <button type="submit" className="text-green-600 hover:underline">Approve</button>
-                          </form>
-                          <form action={rejectPublication.bind(null, pub.id)}>
-                            <button type="submit" className="text-red-600 hover:underline">Reject</button>
-                          </form>
-                        </>
+                        <Link href={`/dashboard/publications/${pub.id}`} className="px-3 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400 rounded-md font-medium transition-colors">Review</Link>
                       ) : (
                         <Link href={`/dashboard/publications/${pub.id}`} className="text-brand-600 hover:underline">View</Link>
                       )}

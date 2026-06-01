@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { notFound } from 'next/navigation';
+import { approvePublication, rejectPublication } from '../../actions';
 
 export default async function PublicationDetail({ params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
@@ -37,6 +38,8 @@ export default async function PublicationDetail({ params }: { params: Promise<{ 
     );
   }
 
+  const canApprove = session.user.role === 'SUPER_ADMIN' || session.user.role === 'INSTITUTION_ADMIN' || session.user.role === 'HOD';
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6">
       <div className="max-w-4xl mx-auto">
@@ -55,6 +58,20 @@ export default async function PublicationDetail({ params }: { params: Promise<{ 
           }`}>
             {publication.status}
           </span>
+          {publication.status === 'PENDING' && canApprove && (
+            <div className="flex items-center gap-3 ml-4">
+              <form action={approvePublication.bind(null, publication.id)}>
+                <button type="submit" className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors shadow-sm">
+                  Approve
+                </button>
+              </form>
+              <form action={rejectPublication.bind(null, publication.id)}>
+                <button type="submit" className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 rounded-lg font-medium transition-colors">
+                  Reject
+                </button>
+              </form>
+            </div>
+          )}
         </div>
 
         <div className="glass-card p-8 mb-8">
