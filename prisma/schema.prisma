@@ -1,0 +1,361 @@
+// =============================================================================
+// Faculty Publication Intelligence Agent — Database Schema
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN
+  INSTITUTION_ADMIN
+  HOD
+  FACULTY
+  VIEWER
+}
+
+enum PublicationStatus {
+  PENDING
+  ENRICHING
+  VALIDATED
+  FLAGGED
+  APPROVED
+  REJECTED
+}
+
+enum PublicationType {
+  INTERNATIONAL_JOURNAL
+  NATIONAL_JOURNAL
+  INTERNATIONAL_CONFERENCE
+  NATIONAL_CONFERENCE
+  BOOK_CHAPTER
+  PATENT
+  BOOK
+  THESIS
+}
+
+enum Quartile {
+  Q1
+  Q2
+  Q3
+  Q4
+  NA
+}
+
+enum MetadataSource {
+  CROSSREF
+  SCOPUS
+  SCHOLAR
+  CORE
+  MANUAL
+}
+
+enum ValidatedBy {
+  AI
+  MANUAL
+}
+
+enum BatchJobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ReportType {
+  FACULTY_ANNUAL
+  DEPARTMENT_ANNUAL
+  NIRF
+  NBA
+  NAAC
+  CUSTOM
+}
+
+enum ReportFormat {
+  PDF
+  EXCEL
+  WORD
+}
+
+// ─── Models ─────────────────────────────────────────────────────────────────────
+
+model Institution {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  domain    String?
+  logoUrl   String?
+  address   String?
+  city      String?
+  state     String?
+  country   String   @default("India")
+  website   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  departments  Department[]
+  users        User[]
+  faculty      Faculty[]
+  publications Publication[]
+  batchJobs    BatchJob[]
+  reports      Report[]
+  apiKeys      ApiKey[]
+
+  @@map("institutions")
+}
+
+model Department {
+  id              String   @id @default(cuid())
+  name            String
+  code            String
+  headFacultyId   String?
+  institutionId   String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  institution  Institution   @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  headFaculty  Faculty?      @relation("DepartmentHead", fields: [headFacultyId], references: [id])
+  faculty      Faculty[]     @relation("DepartmentFaculty")
+  publications Publication[]
+  reports      Report[]
+
+  @@unique([code, institutionId])
+  @@map("departments")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  password      String
+  role          UserRole  @default(FACULTY)
+  facultyId     String?   @unique
+  institutionId String?
+  isActive      Boolean   @default(true)
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  faculty       Faculty?      @relation(fields: [facultyId], references: [id])
+  institution   Institution?  @relation(fields: [institutionId], references: [id])
+  publications  Publication[] @relation("SubmittedBy")
+  batchJobs     BatchJob[]
+  reports       Report[]
+  auditLogs     AuditLog[]
+  apiKeys       ApiKey[]
+
+  @@index([institutionId])
+  @@index([role])
+  @@map("users")
+}
+
+model Faculty {
+  id             String   @id @default(cuid())
+  employeeId     String
+  name           String
+  designation    String?
+  specialization String?
+  email          String   @unique
+  phone          String?
+  departmentId   String
+  institutionId  String
+  isActive       Boolean  @default(true)
+  joinedAt       DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user            User?
+  department      Department    @relation("DepartmentFaculty", fields: [departmentId], references: [id], onDelete: Cascade)
+  institution     Institution   @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  publications    Publication[]
+  headOfDept      Department[]  @relation("DepartmentHead")
+
+  @@unique([employeeId, institutionId])
+  @@index([departmentId])
+  @@index([institutionId])
+  @@map("faculty")
+}
+
+model Publication {
+  id              String            @id @default(cuid())
+  title           String
+  doi             String?
+  isbn            String?
+  url             String?
+  abstract        String?
+  keywords        String[]
+  authors         String[]
+  year            Int?
+  month           Int?
+  volume          String?
+  issue           String?
+  pages           String?
+  publisher       String?
+  journalName     String?
+  conferenceName  String?
+  status          PublicationStatus @default(PENDING)
+  publicationType PublicationType?
+  quartile        Quartile          @default(NA)
+  isIndexed       Boolean           @default(false)
+  indexingDbs     String[]
+  impactFactor    Float?
+  citationCount   Int               @default(0)
+  hIndex          Int?
+  issnNumber      String?
+  isbnNumber      String?
+  pdfUrl          String?
+
+  facultyId       String?
+  departmentId    String?
+  institutionId   String
+  submittedById   String?
+
+  enrichedAt      DateTime?
+  validatedAt     DateTime?
+  approvedAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  faculty          Faculty?              @relation(fields: [facultyId], references: [id])
+  department       Department?           @relation(fields: [departmentId], references: [id])
+  institution      Institution           @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  submittedBy      User?                 @relation("SubmittedBy", fields: [submittedById], references: [id])
+  metadata         PublicationMetadata[]
+  validationResult ValidationResult?
+
+  @@index([doi])
+  @@index([institutionId])
+  @@index([facultyId])
+  @@index([departmentId])
+  @@index([status])
+  @@index([publicationType])
+  @@index([year])
+  @@index([title])
+  @@map("publications")
+}
+
+model PublicationMetadata {
+  id            String         @id @default(cuid())
+  publicationId String
+  source        MetadataSource
+  rawData       Json?
+  enrichedData  Json?
+  confidence    Decimal        @default(0)
+  createdAt     DateTime       @default(now())
+
+  publication Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+
+  @@index([publicationId])
+  @@map("publication_metadata")
+}
+
+model ValidationResult {
+  id             String     @id @default(cuid())
+  publicationId  String     @unique
+  overallScore   Decimal    @default(0)
+  isValid        Boolean    @default(false)
+  issues         Json?
+  suggestions    Json?
+  duplicates     Json?
+  validatedBy    ValidatedBy @default(AI)
+  validatedAt    DateTime   @default(now())
+  agentResponse  String?
+
+  publication Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+
+  @@map("validation_results")
+}
+
+model BatchJob {
+  id               String         @id @default(cuid())
+  fileName         String
+  fileUrl          String?
+  totalRecords     Int            @default(0)
+  processedRecords Int            @default(0)
+  successCount     Int            @default(0)
+  errorCount       Int            @default(0)
+  status           BatchJobStatus @default(QUEUED)
+  errors           Json?
+  institutionId    String
+  submittedById    String
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime       @default(now())
+
+  institution Institution @relation(fields: [institutionId], references: [id])
+  submittedBy User        @relation(fields: [submittedById], references: [id])
+
+  @@index([institutionId])
+  @@index([status])
+  @@map("batch_jobs")
+}
+
+model Report {
+  id            String       @id @default(cuid())
+  title         String
+  type          ReportType
+  format        ReportFormat
+  filters       Json?
+  fileUrl       String?
+  fileSize      Int?
+  generatedById String
+  institutionId String
+  departmentId  String?
+  fromDate      DateTime?
+  toDate        DateTime?
+  createdAt     DateTime     @default(now())
+
+  generatedBy Institution @relation(fields: [institutionId], references: [id])
+  user        User        @relation(fields: [generatedById], references: [id])
+  department  Department? @relation(fields: [departmentId], references: [id])
+
+  @@index([institutionId])
+  @@index([type])
+  @@map("reports")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  entityType String
+  entityId   String
+  oldData    Json?
+  newData    Json?
+  userId     String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model ApiKey {
+  id            String   @id @default(cuid())
+  name          String
+  hashedKey     String   @unique
+  userId        String
+  institutionId String?
+  permissions   String[]
+  lastUsedAt    DateTime?
+  expiresAt     DateTime?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  user        User         @relation(fields: [userId], references: [id])
+  institution Institution? @relation(fields: [institutionId], references: [id])
+
+  @@index([hashedKey])
+  @@map("api_keys")
+}

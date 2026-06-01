@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/faculty_db?schema=public
+      - REDIS_URL=redis://redis:6379
+      - NEXTAUTH_SECRET=your_super_secret_key_here
+      - NEXTAUTH_URL=http://localhost:3000
+    depends_on:
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
+      db-init:
+        condition: service_completed_successfully
+    restart: always
+
+  db-init:
+    build:
+      context: .
+      target: builder
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/faculty_db?schema=public
+    command: sh -c "npx prisma generate && chmod +x docker/init-db.sh && ./docker/init-db.sh"
+    depends_on:
+      db:
+        condition: service_started
+
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=faculty_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+
+volumes:
+  postgres_data:
+  redis_data:
