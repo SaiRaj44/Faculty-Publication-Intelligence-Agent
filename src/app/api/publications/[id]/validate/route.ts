@@ -1,21 +1,24 @@
-import { NextResponse } from 'next-auth/next';
+import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { validationService } from '@/services/validation.service';
 
-export async function POST(req: any, { params }: { params: { id: string } }) {
+export async function POST(req: any, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    if (!session || !session.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const publication = await prisma.publication.findUnique({ where: { id: params.id } });
+    const resolvedParams = await params;
+    const pubId = resolvedParams.id;
+
+    const publication = await prisma.publication.findUnique({ where: { id: pubId } });
     if (!publication) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     // Synchronous validation
-    const report = await validationService.validatePublication(params.id);
+    const report = await validationService.validatePublication(pubId);
     
     return NextResponse.json({ data: report, message: 'Validation completed' });
     

@@ -4,15 +4,17 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { PublicationStatus } from '@prisma/client';
 
-export async function GET(req: any, { params }: { params: { id: string } }) {
+export async function GET(req: any, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { id } = await params;
+
     const publication = await prisma.publication.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         faculty: { select: { name: true, employeeId: true } },
         department: { select: { name: true } },
@@ -36,14 +38,16 @@ export async function GET(req: any, { params }: { params: { id: string } }) {
   }
 }
 
-export async function PATCH(req: any, { params }: { params: { id: string } }) {
+export async function PATCH(req: any, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const publication = await prisma.publication.findUnique({ where: { id: params.id } });
+    const { id } = await params;
+
+    const publication = await prisma.publication.findUnique({ where: { id } });
     if (!publication) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     // RBAC
@@ -59,7 +63,7 @@ export async function PATCH(req: any, { params }: { params: { id: string } }) {
     }
 
     const updated = await prisma.publication.update({
-      where: { id: params.id },
+      where: { id },
       data: body
     });
 
@@ -68,7 +72,7 @@ export async function PATCH(req: any, { params }: { params: { id: string } }) {
       data: {
         action: 'UPDATE_PUBLICATION',
         entityType: 'PUBLICATION',
-        entityId: params.id,
+        entityId: id,
         newData: body,
         userId: session.user.id
       }
@@ -80,14 +84,16 @@ export async function PATCH(req: any, { params }: { params: { id: string } }) {
   }
 }
 
-export async function DELETE(req: any, { params }: { params: { id: string } }) {
+export async function DELETE(req: any, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const publication = await prisma.publication.findUnique({ where: { id: params.id } });
+    const { id } = await params;
+
+    const publication = await prisma.publication.findUnique({ where: { id } });
     if (!publication) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     // RBAC: Only admins or the original owner (if pending/flagged) can delete
@@ -99,14 +105,14 @@ export async function DELETE(req: any, { params }: { params: { id: string } }) {
       return NextResponse.json({ error: 'Forbidden to delete approved publications' }, { status: 403 });
     }
 
-    await prisma.publication.delete({ where: { id: params.id } });
+    await prisma.publication.delete({ where: { id } });
 
     // Audit log
     await prisma.auditLog.create({
       data: {
         action: 'DELETE_PUBLICATION',
         entityType: 'PUBLICATION',
-        entityId: params.id,
+        entityId: id,
         oldData: publication as any,
         userId: session.user.id
       }
